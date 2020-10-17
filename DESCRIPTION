@@ -1,0 +1,15 @@
+Package: SpatCorrImage
+Type: Package
+Title: Spatial Adaptive Varying Corraltion Analysis for for Multimodal Neuroimaging Data
+Version: 0.1.0
+Author@R: person(given = "Jian",
+           family = "Kang",
+           role = c("aut", "cre"),
+           email = "jiankang@umich.edu")
+Maintainer: Jian Kang <jiankang@umich.edu>
+Description: More about what it does (maybe more than one line)
+    Use four spaces when indenting paragraphs within the Description.
+License: GRL-2
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.1.1
