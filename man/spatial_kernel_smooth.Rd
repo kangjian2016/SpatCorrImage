@@ -4,20 +4,46 @@
 \alias{spatial_kernel_smooth}
 \title{Spatial adaptive kernel smoothing}
 \usage{
-spatial_kernel_smooth(val, grids, neighbors = NULL, radius = 3, n_cor = 0.9)
+spatial_kernel_smooth(
+  img,
+  grids = NULL,
+  mask = NULL,
+  neighbors = NULL,
+  radius = 3,
+  n_cor = 0.9
+)
 }
 \arguments{
-\item{\code{val}}{a n x 1 vector of imaging data.}
+\item{img}{an array for image.}
 
-\item{\code{grids}}{a matrix of x, y, z coordinates.}
+\item{grids}{a list of grids for each dimenion of the image. .}
+
+\item{mask}{an array for mask}
+
+\item{neighbors}{a list object contains two matrices: \code{idx} and \code{dist}.
+\code{idx} contains the neighbor indices of each voxel in each row.
+\code{dist} contains the distances between neightbors and the voxel in each row.}
+
+\item{radius}{a positive number for the size of neighborhood. Only use when neighbors is NULL.}
+
+\item{n_cor}{a positive correlation value between 0 and 1 to control the smoothness. A lager value generates a smoother image.}
 }
 \value{
-The sum of \code{x} and \code{y}.
+Smoothed images with the same dimensions of the raw images.
 }
 \description{
 Spatial adaptive kernel smoothing
 }
 \examples{
-n = 1000
-val = rnorm(n)
+
+grids = lapply(1:3,function(i) seq(-29,29,by=2))
+dim_img = sapply(1:3,function(i) length(grids[[i]]))
+n_voxels = prod(dim_img)
+raw_img = array(rnorm(n_voxels),dim=dim_img)
+smooth_img = spatial_kernel_smooth(raw_img,grids,n_cor=0.9)
+
+
+}
+\author{
+Jian Kang <jiankang@umich.edu>
 }
