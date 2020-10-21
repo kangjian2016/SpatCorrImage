@@ -6,7 +6,7 @@
 ```{r}
 # Please make sure you have installed the following packages
 # ggplot2, reshape, rlang, igraph
-devtools::install_github("kangjian2016/BayesGPfit")
+devtools::install_github("kangjian2016/SpatCorrImage")
 ```
 
 * ** Simulate images **
