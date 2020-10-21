@@ -33,5 +33,5 @@ plot_3D_image_slices(cor_img,grids,c(-2,2))
 ```{r}
 res <- Spat_Corr_3D_images(img_1,img_2,grids,mask,pos_prob=0.90,neg_prob=0.90,n_cor=0.5,size=10)
 plot_3D_image_slices(list(cor=res$cor_img,smooth_cor=res$smooth_cor_est,pos_cluster=res$pos_cluster),grids,c(-3,3))
-print(res)
+print(res$tab)
 ```
