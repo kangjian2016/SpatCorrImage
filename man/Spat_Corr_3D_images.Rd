@@ -83,6 +83,9 @@ smooth_cor=res$smooth_cor_est,
 pos_cluster=res$pos_cluster),grids,c(-3,3))
 
 }
+\references{
+Li L, Kang J, Lockhart SN, Adams J, Jagust WJ. (2019) Spatially adaptive varying correlation analysis for multimodal neuroimaging data. IEEE Trans Med Imaging. 38(1):113-123. PMCID: PMC6324929
+}
 \author{
 Jian Kang <jiankang@umich.edu>
 }

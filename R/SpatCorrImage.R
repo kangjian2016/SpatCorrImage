@@ -465,7 +465,7 @@ region_test = function(group_idx,dat_1,dat_2,coords,rho_list = seq(-0.8,0.8,by=0
 #'}
 #'
 #'@author Jian Kang <jiankang@umich.edu>
-#'
+#'@references Li L, Kang J, Lockhart SN, Adams J, Jagust WJ. (2019) Spatially adaptive varying correlation analysis for multimodal neuroimaging data. IEEE Trans Med Imaging. 38(1):113-123. PMCID: PMC6324929
 #'@examples
 #'set.seed(1000)
 #'dim_img = c(10,10,10)
