@@ -2,7 +2,7 @@
 % Please edit documentation in R/SpatCorrImage.R
 \name{spatial_kernel_smooth}
 \alias{spatial_kernel_smooth}
-\title{Spatial adaptive kernel smoothing}
+\title{Spatial kernel smoothing}
 \usage{
 spatial_kernel_smooth(
   img,
@@ -16,7 +16,7 @@ spatial_kernel_smooth(
 \arguments{
 \item{img}{an array for image.}
 
-\item{grids}{a list of grids for each dimenion of the image. .}
+\item{grids}{a list of grids for each dimenion of the image.}
 
 \item{mask}{an array for mask}
 
@@ -32,7 +32,7 @@ spatial_kernel_smooth(
 Smoothed images with the same dimensions of the raw images.
 }
 \description{
-Spatial adaptive kernel smoothing
+Spatial kernel smoothing for images
 }
 \examples{
 

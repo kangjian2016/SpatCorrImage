@@ -11,6 +11,10 @@
 #   Test Package:              'Cmd + Shift + T'
 
 #' @importFrom utils setTxtProgressBar txtProgressBar
+#' @import ggplot2 reshape rlang stats
+#' @importFrom igraph graph clusters
+
+
 sapply_pb <- function(X, FUN, ...){
   env <- environment()
   pb_Total <- length(X)
@@ -44,9 +48,6 @@ lapply_pb <- function(X, FUN, ...){
   close(pb)
   res
 }
-
-
-
 
 
 #' Find the neighbors for each voxels in images
@@ -122,6 +123,7 @@ find_image_neighbors <- function(grids,d = NULL,radius = 1){
 
 
 #'Create sphere mask for image
+#'
 #'@param grids  a list of grids for each dimenion of the image.
 #'@param center the center of sphere. Default value is a vector of zeros.
 #'@param radius a postive number indicates the size of the neighborhood.
@@ -144,7 +146,7 @@ create_sphere_mask = function(grids,center=rep(0,length=length(grids)),radius=3)
 
 
 #' Plot 3D Images by Slices by Slices
-#'@import ggplot2 reshape rlang
+#'
 #'@param images either an array for one image or a list of arrays for multiple images
 #'@param grids a list of grids for each dimenion of the image.
 #'@param Z_range lower and upper bound of Z slices
@@ -216,10 +218,12 @@ plot_3D_image_slices = function(images, grids, Z_range,Z_slices=NULL,
 
 
 
-#' Spatial adaptive kernel smoothing
-#' @importFrom stats weighted.mean
+#' Spatial kernel smoothing
+#'
+#' Spatial kernel smoothing for images
+#'
 #' @param img an array for image.
-#' @param grids a list of grids for each dimenion of the image. .
+#' @param grids a list of grids for each dimenion of the image.
 #' @param mask an array for mask
 #' @param neighbors a list object contains two matrices: \code{idx} and \code{dist}.
 #' \code{idx} contains the neighbor indices of each voxel in each row.
@@ -259,39 +263,267 @@ spatial_kernel_smooth = function(img,grids=NULL,mask=NULL,neighbors=NULL,
   return(smooth_img)
 }
 
+#' Compute voxel-wise correlations between two groups of 3D images
+#'
+#' This function is to compute voxel-wise spatially varying correlation between two groups of 3D images
+#'@param img_1 a 4D array of multiple 3D images
+#'@param img_2 a 4D array of multiple 3D images
+#'@param mask a 3D array of maske taking logicdal values. The default is NULL.
+#'@return a 3D array of the correlation maps
+#'@author Jian Kang <jiankang@umich.edu>
+#'
+#'@examples
+#'set.seed(1000)
+#'dim_img = c(10,10,10)
+#'n = 50
+#'grids <- lapply(1:3,function(i) seq(-round(dim_img[i]/2)+1,round(dim_img[i]/2),length=dim_img[i]))
+#'img_1 <- array(rnorm(prod(dim_img)*n),dim=c(dim_img,n))
+#'img_2 <- array(rnorm(prod(dim_img)*n),dim=c(dim_img,n))
+#'cor_region <- create_sphere_mask(grids,radius=2)
+#'cor_region_list <- array(cor_region,dim=dim(img_2))
+#'img_2 <- ifelse(cor_region_list,img_1+rnorm(sum(cor_region)*n,sd=0.5),img_2)
+#'mask <- create_sphere_mask(grids,radius=4)
+#'cor_map <- comp_3D_images_corr(img_1,img_2,mask)
+#'plot_3D_image_slices(cor_map,grids,c(-2,2))
+#'@export
+comp_3D_images_corr = function(img_1,img_2,mask=NULL){
+  dim_img =dim(img_1)
+  n = dim_img[4]
+  if(!is.null(mask)){
+    for(i in 1:n){
+      img_1[,,,i] <- ifelse(mask,img_1[,,,i],NA)
+    }
+    for(i in 1:n){
+      img_2[,,,i] <- ifelse(mask,img_2[,,,i],NA)
+    }
+  }
+
+  img12 = array(NA,dim=c(dim_img,2))
+  img12[,,,,1] = img_1
+  img12[,,,,2] = img_2
+  cor2 <- function(x){
+    cor(x=x[,1],y=x[,2])
+  }
+  cor_map = apply(img12,c(1,2,3),FUN=cor2)
+  return(cor_map)
+}
 
 
+threshold_classify = function(val,thresh=0.5){
+   return(val>thresh)
+}
+
+spatial_cluster = function(adj_mat){
+  tmp = which(adj_mat, arr.ind=TRUE)
+  edge_index_pair = tmp[tmp[,2]>tmp[,1],]
+  edge = as.vector(t(edge_index_pair))
+  gph = graph(edge, n=as.numeric(dim(adj_mat)[1]), directed=FALSE)
+  max_connect = clusters(gph)$membership
+  return(max_connect)
+}
+
+find_spatial_group = function(cluster,coords,adj_dist=1,size=100){
+  cluster_idx = which(cluster)
+  adj_mat = (as.matrix(dist(coords[cluster_idx,]))<=adj_dist)
+  group_idx = spatial_cluster(adj_mat)
+  tab = table(group_idx)
+  tab = tab[which(tab>=size)]
+  uni_group = as.numeric(names(tab))
+  group = list()
+  # if(length(uni_group)==0){
+  #   tab = table(group_idx)
+  #   size = max(tab)
+  #   warning(paste("The minimum cluster size has been changed to",size,"!!"))
+  #   tab = tab[which(tab>=size)]
+  #   uni_group = as.numeric(names(tab))
+  # }
+  if(length(tab)>0){
+    for(i in 1:length(tab)){
+      group[[i]] = cluster_idx[group_idx == uni_group[i]]
+    }
+  }
+  return(group)
+}
+
+standardize_data = function(X){
+  newX = sapply(1:ncol(X), function(i) return((X[,i]-mean(X[,i]))/sd(X[,i])))
+  return(newX)
+}
+
+#'Minimum contrast method estimate image correations
+#'
+#'This function estimate the rho parameter in the exponetial squared covariance kernel exp(-rho*||x - x'||^2)
+#'
+#'@param X a matrix format of multiple images, where rows are different images in vector format.
+#'@param coords voxel locations of images: each raw has the (x,y) coordinates for 2D images or (x, y, z) coordinates for 3D images.
+#'@return the rho value
+#'@author Jian Kang <jiankang@umich.edu>
+#'@examples
+#'n = 10
+#'coords = expand.grid(seq(-1,1,length=n),seq(-1,1,length=n))
+#'rho0 = 0.5
+#'dist_coords = dist(coords)
+#'Sigma = exp(-rho0*as.matrix(dist_coords^1.99))
+#'R <- chol(Sigma)
+#'m = nrow(coords)
+#'N = 20
+#'X <- t(crossprod(R,matrix(rnorm(m*N),nrow=m,ncol=N)))
+#'image(matrix(X[1,],n,n))
+#'minimum_contrast_images(X,coords)
+#'
+#'@export
+minimum_contrast_images  <- function(X, coords){
+  cor_X = cor(X)
+  cY <- cor_X[lower.tri(cor_X)]
+  cX <- as.vector(dist(coords))^1.99
+  min_cY<- min(abs(cY))
+  cY <- ifelse(cY<0,min_cY,cY)
+
+    cY <- -log(cY)
+    cX <- cX
+    res <- lm(cY~cX)
+    rho <- res$coef
+  return(rho)
+}
+
+compute_log_likelihood = function(rho,X,Y,R_x_est,R_y_est,modify=1e-10){
+  n = nrow(X)
+  p = ncol(X)
+  Sigma = matrix(0,nrow=2*p,ncol=2*p)
+  Sigma[1:p,1:p] = R_x_est
+  Sigma[p+1:p,p+1:p] = R_y_est
+  Sigma[1:p,p+1:p] = diag(p)*rho
+  Sigma[p+1:p,1:p] = diag(p)*rho
+  eigres = eigen(Sigma+modify)
+  if(min(eigres$values)<=0)
+    loglike = -Inf
+  else{
+    XY = cbind(X,Y)
+    temp = diag(1/sqrt(eigres$values))%*%t(eigres$vectors)%*%t(XY)
+    loglike = -0.5*n*sum(log(eigres$values))-0.5*sum(diag(t(temp)%*%temp))
+  }
+  return(loglike)
+}
+
+region_test = function(group_idx,dat_1,dat_2,coords,rho_list = seq(-0.8,0.8,by=0.05)){
+  X = dat_1[,group_idx]
+  dim(X) = c(nrow(dat_1),length(group_idx))
+  Y = dat_2[,group_idx]
+  dim(Y) = c(nrow(dat_2),length(group_idx))
+  X = standardize_data(X)
+  Y = standardize_data(Y)
+  p  = length(group_idx)
+
+  rhoX <- minimum_contrast_images(X,coords[group_idx,])
+  dist_mat = as.matrix(dist(coords[group_idx,])^1.99)
+  R_x_est = exp(-rhoX[1]-rhoX[2]*dist_mat)
+  diag(R_x_est) <- 1
+
+  rhoY <- minimum_contrast_images(Y,coords[group_idx,])
+  R_y_est = exp(-rhoY[1]-rhoY[2]*dist_mat)
+  diag(R_y_est) <- 1
+
+  loglike = sapply(rho_list, function(rho) compute_log_likelihood(rho,X,Y,R_x_est,R_y_est))
+  Lambda = 2*(loglike[which.max(loglike)] - loglike[which(rho_list==0)])
+  pvalue = pchisq(Lambda,df=1,lower.tail = FALSE)
+  return(list(res=c(pvalue=pvalue,rho_est=rho_list[which.max(loglike)],Lambda=Lambda),
+              loglike = cbind(rho_list=rho_list,loglike)))
+}
 
 
+#' Spatially varying correlation analysis between two groups of 3D images
+#'
+#' This function is to estimate and test voxel-wise spatially varying correlation between two groups of 3D images
+#'@param img_1 a 4D array of multiple 3D images
+#'@param img_2 a 4D array of multiple 3D images
+#'@param grids a list of grids for each dimenion of the image.
+#'@param mask a 3D array of maske taking logicdal values. The default is NULL.
+#'@param voxel_neighbors a list object contains two matrices: \code{idx} and \code{dist}.
+#' \code{idx} contains the neighbor indices of each voxel in each row.
+#' \code{dist} contains the distances between neightbors and the voxel in each row.
+#'@param rho_list a vector of correlation values to be tested.
+#'@param adj_dist the distance of adjacent nodes.
+#'@param size the minimum clutersize.
+#'@param n_cor the correlation between neighboring voxels for smoothing.
+#'@param pos_prob positive correlation cluster threshold probablity.
+#'@param neg_prob negative correlation cluster threshold probablity.
+#'@return a list of objects containing all the results
+#'\describe{
+#'\item{cor_img}{A correlation map}
+#'\item{smooth_cor_est}{A smoothed correlation map}
+#'\item{pos_cluster}{A logical image for all clusters with positive correlation}
+#'\item{neg_cluster}{A logical image for all clusters with negative correlation}
+#'\item{neg_group}{A list of voxel indices for all clusters with negative correlation}
+#'\item{pos_group}{A list of voxel indices for all clusters with positive correlation}
+#'\item{all_group}{A list of voxel indices for all clusters}
+#'\item{simple_est_all}{A vector of mean correlation estimates within clusters}
+#'\item{mle_all}{A list objects of the MLEs and likelihood ratio tests results}
+#'\item{tab}{A summary of results}
+#'\item{dat_1}{preprocessed images for \code{img_1} with each raw representing one image in vector format}
+#'\item{dat_2}{preprocessed images for \code{img_2} with each raw representing one image in vector format}
+#'\item{coords}{locations for all voxels}
+#'}
+#'
+#'@author Jian Kang <jiankang@umich.edu>
+#'
+#'@examples
+#'set.seed(1000)
+#'dim_img = c(10,10,10)
+#'n = 50
+#'grids <- lapply(1:3,function(i) seq(-round(dim_img[i]/2)+1,round(dim_img[i]/2),length=dim_img[i]))
+#'img_1 <- array(rnorm(prod(dim_img)*n),dim=c(dim_img,n))
+#'img_2 <- array(rnorm(prod(dim_img)*n),dim=c(dim_img,n))
+#'cor_region <- create_sphere_mask(grids,radius=3)
+#'cor_region_list <- array(cor_region,dim=dim(img_2))
+#'img_2 <- ifelse(cor_region_list,img_1+rnorm(prod(dim_img)*n,sd=0.5),img_2)
+#'mask <- create_sphere_mask(grids,radius=5)
+#'cor_img <- comp_3D_images_corr(img_1,img_2,mask)
+#'plot_3D_image_slices(cor_img,grids,c(-2,2))
+#'res <- Spat_Corr_3D_images(img_1,img_2,grids,mask,pos_prob=0.90,neg_prob=0.90,n_cor=0.5,size=10)
+#'plot_3D_image_slices(list(cor=res$cor_img,
+#'smooth_cor=res$smooth_cor_est,
+#'pos_cluster=res$pos_cluster),grids,c(-3,3))
+#'
+#'@export
+Spat_Corr_3D_images = function(img_1, img_2,
+                               grids, mask = NULL,
+                               voxel_neighbors = NULL,
+                               rho_list = sort(c(0,seq(-0.95,0.95,length=100))),
+                               adj_dist = 1, size = 5,n_cor = 0.9,
+                               pos_prob = 0.8, neg_prob = 0.8){
 
-# comp_corr = function(dat_1,dat_2){
-#   core_fun = function(j) cor(dat_1[,j],dat_2[,j])
-#   cor_map = unlist(lapply(1:ncol(dat_1),core_fun))
-#   return(cor_map)
-# }
-#
-# threshold_classify = function(val,thresh=0.5){
-#   return(val>thresh)
-# }
-#
-#
-# create_partition_cor_map_two = function(dat_1,dat_2,coords,voxel_neighbors,aalcode,rho_list = seq(-0.5,0.5,by=0.01),adj_dist=1,size=20){
-#
-#   cor_val = comp_corr(dat_1,dat_2)
-#
-#   smooth_cor_est = spatial_kernel_smooth(val=cor_val,grids=coords,
-#                                          neighbors=voxel_neighbors,n_cor = 0.9)
-#   pos_cluster = threshold_classify(smooth_cor_est,quantile(smooth_cor_est,prob=0.99,na.rm=TRUE))
-#   neg_cluster = threshold_classify(-smooth_cor_est,quantile(-smooth_cor_est,prob=0.99,na.rm=TRUE))
-#   neg_group=find_spatial_group(neg_cluster&(aalcode>0),coords,adj_dist=adj_dist,size=size)
-#   pos_group=find_spatial_group(pos_cluster&(aalcode>0),coords,adj_dist=adj_dist,size=size)
-#   all_group = c(neg_group,pos_group)
-#   simple_est_all = sapply(1:length(all_group),function(i) mean(cor_val[all_group[[i]]]))
-#   mle_all = mclapply(1:length(all_group),
-#                      function(i) region_test(group_idx = all_group[[i]],dat_1,dat_2,coords,rho_list),mc.cores = 7)
-#
-#   return(list(cor_val=cor_val,smooth_cor_est=smooth_cor_est,pos_cluster=pos_cluster,neg_cluster=neg_cluster,
-#               neg_group = neg_group,pos_group=pos_group,all_group=all_group,
-#               simple_est_all=simple_est_all,mle_all=mle_all))
-# }
+  if(is.null(voxel_neighbors)){
+    voxel_neightbors <- find_image_neighbors(grids)
+  }
+
+  cor_img = comp_3D_images_corr(img_1,img_2,mask)
+  smooth_cor_est = spatial_kernel_smooth(img = cor_img, grids=grids,
+                                         neighbors = voxel_neighbors, n_cor = n_cor)
+
+  pos_cluster = threshold_classify(smooth_cor_est,quantile(smooth_cor_est,prob=pos_prob,na.rm=TRUE))
+  neg_cluster = threshold_classify(-smooth_cor_est,quantile(-smooth_cor_est,prob=neg_prob,na.rm=TRUE))
+
+  coords <- expand.grid(grids)
+  neg_group <- find_spatial_group(neg_cluster&mask,coords,adj_dist=adj_dist,size=size)
+  pos_group <- find_spatial_group(pos_cluster&mask,coords,adj_dist=adj_dist,size=size)
+
+  all_group = c(neg_group,pos_group)
+
+  simple_est_all <- sapply(1:length(all_group),function(i) mean(cor_img[all_group[[i]]]))
+  dim_img = dim(img_1)
+  dat_1 = t(array(img_1,dim=c(prod(dim_img[1:3]),dim_img[4])))
+  dat_2 = t(array(img_2,dim=c(prod(dim_img[1:3]),dim_img[4])))
+
+  mle_all <- lapply_pb(1:length(all_group),
+                     function(i) region_test(group_idx = all_group[[i]],dat_1,dat_2,coords,rho_list))
+  mle_res <- sapply(1:length(all_group),function(i) mle_all[[i]]$res[1:2])
+  region_size <-sapply(1:length(all_group),function(i) length(all_group[[i]]))
+  tab <- rbind(simple_est_all,mle_res,region_size)
+  colnames(tab) <- paste("Region",1:length(all_group))
+
+  return(list(cor_img=cor_img,smooth_cor_est=smooth_cor_est,pos_cluster=pos_cluster,neg_cluster=neg_cluster,
+              neg_group = neg_group,pos_group=pos_group,all_group=all_group,
+              simple_est_all=simple_est_all,mle_all=mle_all,
+              tab=tab,dat_1=dat_1,dat_2=dat_2,coords=coords))
+}
 
