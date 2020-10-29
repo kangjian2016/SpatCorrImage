@@ -298,12 +298,18 @@ comp_3D_images_corr = function(img_1,img_2,mask=NULL){
     }
   }
 
+  var_1 = apply(img_1,c(1,2,3),FUN=var)
+  var_2 = apply(img_2,c(1,2,3),FUN=var)
+  zero_mask = (var_1 ==0 | var_2 == 0)
+  non_zero_mask_list = array(!zero_mask,dim=dim_img)
+
   img12 = array(NA,dim=c(dim_img,2))
-  img12[,,,,1] = img_1
-  img12[,,,,2] = img_2
+  img12[,,,,1] = ifelse(non_zero_mask_list,img_1,NA)
+  img12[,,,,2] = ifelse(non_zero_mask_list,img_2,NA)
   cor2 <- function(x){
     cor(x=x[,1],y=x[,2])
   }
+
   cor_map = apply(img12,c(1,2,3),FUN=cor2)
   return(cor_map)
 }
@@ -346,7 +352,13 @@ find_spatial_group = function(cluster,coords,adj_dist=1,size=100){
 }
 
 standardize_data = function(X){
-  newX = sapply(1:ncol(X), function(i) return((X[,i]-mean(X[,i]))/sd(X[,i])))
+  idx = which(apply(X,2,var)>0)
+  n = nrow(X)
+  p = ncol(X)
+  newX = matrix(0,nrow=n,ncol=p)
+  if(length(idx)>0){
+    newX[,idx] = sapply(idx, function(i) return((X[,i]-mean(X[,i]))/sd(X[,i])))
+  }
   return(newX)
 }
 
@@ -373,16 +385,23 @@ standardize_data = function(X){
 #'
 #'@export
 minimum_contrast_images  <- function(X, coords){
-  cor_X = cor(X)
+  idx = which(apply(X,2,var)>0)
+  cor_X = diag(ncol(X))
+  if(length(idx)>0){
+    cor_X[idx,idx] = cor(X[,idx])
+  }
   cY <- cor_X[lower.tri(cor_X)]
   cX <- as.vector(dist(coords))^1.99
   min_cY<- min(abs(cY))
   cY <- ifelse(cY<0,min_cY,cY)
 
-    cY <- -log(cY)
+    cY <- -log(cY+1e-10)
     cX <- cX
+
     res <- lm(cY~cX)
     rho <- res$coef
+
+
   return(rho)
 }
 
@@ -506,20 +525,32 @@ Spat_Corr_3D_images = function(img_1, img_2,
   coords <- expand.grid(grids)
   neg_group <- find_spatial_group(neg_cluster&mask,coords,adj_dist=adj_dist,size=size)
   pos_group <- find_spatial_group(pos_cluster&mask,coords,adj_dist=adj_dist,size=size)
-
-  all_group = c(neg_group,pos_group)
-
-  simple_est_all <- sapply(1:length(all_group),function(i) mean(cor_img[all_group[[i]]]))
   dim_img = dim(img_1)
   dat_1 = t(array(img_1,dim=c(prod(dim_img[1:3]),dim_img[4])))
   dat_2 = t(array(img_2,dim=c(prod(dim_img[1:3]),dim_img[4])))
 
-  mle_all <- lapply_pb(1:length(all_group),
+  all_group = c(neg_group,pos_group)
+  if(length(all_group)>0){
+    simple_est_all <- sapply(1:length(all_group),function(i) {
+      if(all(is.na(cor_img[all_group[[i]]]))){
+        return(0)
+      }
+      return(mean(cor_img[all_group[[i]]],na.rm=TRUE))
+      })
+    mle_all <- lapply_pb(1:length(all_group),
                      function(i) region_test(group_idx = all_group[[i]],dat_1,dat_2,coords,rho_list))
-  mle_res <- sapply(1:length(all_group),function(i) mle_all[[i]]$res[1:2])
-  region_size <-sapply(1:length(all_group),function(i) length(all_group[[i]]))
-  tab <- rbind(simple_est_all,mle_res,region_size)
-  colnames(tab) <- paste("Region",1:length(all_group))
+    mle_res <- sapply(1:length(all_group),function(i) mle_all[[i]]$res[2:1])
+    region_size <-sapply(1:length(all_group),function(i) length(all_group[[i]]))
+    tab <- rbind(region_size,mle_res,simple_est_all)
+    colnames(tab) <- paste("Region",1:length(all_group))
+  } else{
+    warning("No region has significant non-zero correlation!!")
+    simple_est_all <- NULL
+    mle_all <- NULL
+    mle_res <- NULL
+    region_size <- NULL
+    tab <- NULL
+  }
 
   return(list(cor_img=cor_img,smooth_cor_est=smooth_cor_est,pos_cluster=pos_cluster,neg_cluster=neg_cluster,
               neg_group = neg_group,pos_group=pos_group,all_group=all_group,
