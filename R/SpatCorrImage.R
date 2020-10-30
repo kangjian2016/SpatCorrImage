@@ -424,7 +424,7 @@ compute_log_likelihood = function(rho,X,Y,R_x_est,R_y_est,modify=1e-10){
   return(loglike)
 }
 
-region_test = function(group_idx,dat_1,dat_2,coords,rho_list = seq(-0.8,0.8,by=0.05)){
+region_test = function(group_idx,dat_1,dat_2,coords,rho_list = seq(-0.8,0.8,by=0.05),est_cormat=TRUE){
   X = dat_1[,group_idx]
   dim(X) = c(nrow(dat_1),length(group_idx))
   Y = dat_2[,group_idx]
@@ -433,15 +433,18 @@ region_test = function(group_idx,dat_1,dat_2,coords,rho_list = seq(-0.8,0.8,by=0
   Y = standardize_data(Y)
   p  = length(group_idx)
 
-  rhoX <- minimum_contrast_images(X,coords[group_idx,])
-  dist_mat = as.matrix(dist(coords[group_idx,])^1.99)
-  R_x_est = exp(-rhoX[1]-rhoX[2]*dist_mat)
-  diag(R_x_est) <- 1
-
-  rhoY <- minimum_contrast_images(Y,coords[group_idx,])
-  R_y_est = exp(-rhoY[1]-rhoY[2]*dist_mat)
-  diag(R_y_est) <- 1
-
+  if(est_cormat){
+    rhoX <- minimum_contrast_images(X,coords[group_idx,])
+    dist_mat = as.matrix(dist(coords[group_idx,])^1.99)
+    R_x_est = exp(-rhoX[1]-rhoX[2]*dist_mat)
+    diag(R_x_est) <- 1
+    rhoY <- minimum_contrast_images(Y,coords[group_idx,])
+    R_y_est = exp(-rhoY[1]-rhoY[2]*dist_mat)
+    diag(R_y_est) <- 1
+  } else{
+    R_x_est <- diag(p)
+    R_y_est <- diag(p)
+  }
   loglike = sapply(rho_list, function(rho) compute_log_likelihood(rho,X,Y,R_x_est,R_y_est))
   Lambda = 2*(loglike[which.max(loglike)] - loglike[which(rho_list==0)])
   pvalue = pchisq(Lambda,df=1,lower.tail = FALSE)
@@ -466,6 +469,8 @@ region_test = function(group_idx,dat_1,dat_2,coords,rho_list = seq(-0.8,0.8,by=0
 #'@param n_cor the correlation between neighboring voxels for smoothing.
 #'@param pos_prob positive correlation cluster threshold probablity.
 #'@param neg_prob negative correlation cluster threshold probablity.
+#'@param est_cormat TRUE or FALSE indicating that whether a minimum contrast method is used to estimate
+#'the spatial correlations within each imaging modality. Default is TRUE
 #'@return a list of objects containing all the results
 #'\describe{
 #'\item{cor_img}{A correlation map}
@@ -509,7 +514,7 @@ Spat_Corr_3D_images = function(img_1, img_2,
                                voxel_neighbors = NULL,
                                rho_list = sort(c(0,seq(-0.95,0.95,length=100))),
                                adj_dist = 1, size = 5,n_cor = 0.9,
-                               pos_prob = 0.8, neg_prob = 0.8){
+                               pos_prob = 0.8, neg_prob = 0.8,est_cormat=TRUE){
 
   if(is.null(voxel_neighbors)){
     voxel_neightbors <- find_image_neighbors(grids)

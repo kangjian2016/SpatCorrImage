@@ -15,7 +15,8 @@ Spat_Corr_3D_images(
   size = 5,
   n_cor = 0.9,
   pos_prob = 0.8,
-  neg_prob = 0.8
+  neg_prob = 0.8,
+  est_cormat = TRUE
 )
 }
 \arguments{
@@ -42,6 +43,9 @@ Spat_Corr_3D_images(
 \item{pos_prob}{positive correlation cluster threshold probablity.}
 
 \item{neg_prob}{negative correlation cluster threshold probablity.}
+
+\item{est_cormat}{TRUE or FALSE indicating that whether a minimum contrast method is used to estimate
+the spatial correlations within each imaging modality. Default is TRUE}
 }
 \value{
 a list of objects containing all the results
