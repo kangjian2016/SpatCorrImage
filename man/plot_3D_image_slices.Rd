@@ -16,7 +16,7 @@ plot_3D_image_slices(
 \arguments{
 \item{images}{either an array for one image or a list of arrays for multiple images}
 
-\item{grids}{a list of grids for each dimenion of the image.}
+\item{grids}{a list of grids for each dimension of the image.}
 
 \item{Z_range}{lower and upper bound of Z slices}
 

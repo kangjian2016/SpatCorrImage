@@ -16,7 +16,7 @@ spatial_kernel_smooth(
 \arguments{
 \item{img}{an array for image.}
 
-\item{grids}{a list of grids for each dimenion of the image.}
+\item{grids}{a list of grids for each dimension of the image.}
 
 \item{mask}{an array for mask}
 

@@ -16,7 +16,7 @@ find_image_neighbors(grids, d = NULL, radius = 1)
 \value{
 a list object contains two matrices: \code{idx} and \code{dist}.
 \code{idx} contains the neighbor indices of each voxel in each row.
-\code{dist} contains the distances between neightbors and the voxel in each row.
+\code{dist} contains the distances between neighbors and the voxel in each row.
 }
 \description{
 Find the neighbors for each voxels in images
