@@ -706,12 +706,12 @@ Spat_Corr_3D_images = function(img_1, img_2,
 #'cor_region <- create_sphere_mask(grids,radius=3)
 #'cor_region_list <- array(cor_region,dim=dim(img_2))
 #'img_2 <- ifelse(cor_region_list,img_1+rnorm(num_voxels*n,sd=0.5),img_2)
-#'mask <- create_sphere_mask(grids,radius=5)
-#'cor_img <- comp_images_corr(img_1,img_2,c(mask))
+#'mask <- c(create_sphere_mask(grids,radius=5))
+#'cor_img <- comp_images_corr(img_1,img_2,mask)
 #'plot_3D_image_slices(array(cor_img,dim=dim_img),grids,c(-2,2))
 #'voxel_neighbors <- find_image_neighbors(grids)
 #'coords <- expand.grid(grids)
-#'res <- Spat_Corr_images(img_1,img_2,coords,voxel_neighbors,pos_prob=0.90,neg_prob=0.90,n_cor=0.5,size=10)
+#'res <- Spat_Corr_images(img_1,img_2,coords,voxel_neighbors,mask=mask,pos_prob=0.90,neg_prob=0.90,n_cor=0.5,size=10)
 #'plot_3D_image_slices(list(cor=array(res$cor_img,dim=dim_img),
 #'smooth_cor=array(res$smooth_cor_est,dim=dim_img),
 #'pos_cluster=array(res$pos_cluster,dim=dim_img)),grids,c(-3,3))
@@ -731,6 +731,9 @@ Spat_Corr_images = function(img_1, img_2, coords, voxel_neighbors, mask = NULL,
   pos_cluster = threshold_classify(smooth_cor_est,quantile(smooth_cor_est,prob=pos_prob,na.rm=TRUE))
   neg_cluster = threshold_classify(-smooth_cor_est,quantile(-smooth_cor_est,prob=neg_prob,na.rm=TRUE))
 
+  if(is.null(mask)){
+    mask = rep(1,length=length(neg_cluster))
+  }
   neg_group <- find_spatial_group(neg_cluster&mask,coords,adj_dist=adj_dist,size=size)
   pos_group <- find_spatial_group(pos_cluster&mask,coords,adj_dist=adj_dist,size=size)
 
